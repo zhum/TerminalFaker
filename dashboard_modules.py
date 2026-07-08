@@ -530,26 +530,30 @@ class MatrixModule(Module):
         if self.pending:
             self.last_tick = now
 
-    def _ensure_columns(self, h, w):
-        if self.columns is None or len(self.columns) != w:
-            self.columns = [random.randint(-h, 0) for _ in range(max(w, 1))]
+    def _ensure_columns(self, plot_h, plot_w):
+        if self.columns is None or len(self.columns) != plot_w:
+            self.columns = [random.randint(-plot_h, 0) for _ in range(max(plot_w, 1))]
 
     def render(self, win):
+        self._draw_frame(win, self.name)
         h, w = win.getmaxyx()
-        self._ensure_columns(h, w)
+        # Interior only (row 0/h-1 and col 0/w-1 are the box border), same
+        # inset every other module uses, so the rain stays inside its frame.
+        plot_h = max(0, h - 2)
+        plot_w = max(0, w - 4)
+        self._ensure_columns(plot_h, plot_w)
         if self.pending:
-            for i in range(w):
+            for i in range(plot_w):
                 self.columns[i] += 1
-                if self.columns[i] > h + random.randint(0, h):
-                    self.columns[i] = random.randint(-h, 0)
+                if self.columns[i] > plot_h + random.randint(0, max(plot_h, 1)):
+                    self.columns[i] = random.randint(-plot_h, 0)
 
-        win.erase()
         attr = color_attr(self.colors, self.color)
-        for x in range(w):
-            y = self.columns[x]
-            if 0 <= y < h:
+        for i in range(plot_w):
+            y = self.columns[i]
+            if 0 <= y < plot_h:
                 glyph = random.choice(self.words) if self.words else random.choice(self.charset)
-                safe_addstr(win, y, x, glyph, max(1, w - x), attr)
+                safe_addstr(win, 1 + y, 2 + i, glyph, max(1, plot_w - i), attr)
         win.noutrefresh()
 
 
