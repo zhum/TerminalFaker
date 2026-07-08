@@ -132,6 +132,45 @@ def safe_addstr(win, y, x, text, n=None, attr=curses.A_NORMAL):
         pass
 
 
+def parse_color_thresholds(raw, context=''):
+    """Parse a COLORS value: 'v1:color1,v2:color2,...' into (value, color)
+    pairs sorted ascending by value. Warns and auto-sorts if given out of
+    order rather than silently misrendering."""
+    pairs = []
+    for chunk in (raw or '').split(','):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if ':' not in chunk:
+            print(f"Warning: invalid COLORS entry '{chunk}'{context}, expected value:color")
+            continue
+        val_str, color = chunk.split(':', 1)
+        try:
+            val = float(val_str.strip())
+        except ValueError:
+            print(f"Warning: invalid COLORS value '{val_str}'{context}")
+            continue
+        pairs.append((val, color.strip()))
+
+    if any(pairs[i][0] > pairs[i + 1][0] for i in range(len(pairs) - 1)):
+        print(f"Warning: COLORS entries{context} are not sorted ascending, sorting automatically")
+        pairs.sort(key=lambda p: p[0])
+
+    return pairs
+
+
+def color_for_value(pairs, value, default_color):
+    """Color of the highest threshold <= value; below the first threshold
+    (or if no pairs given) falls back to default_color."""
+    chosen = default_color
+    for threshold, color in pairs:
+        if value >= threshold:
+            chosen = color
+        else:
+            break
+    return chosen
+
+
 # ---------------------------------------------------------------------------
 # base module
 # ---------------------------------------------------------------------------
@@ -173,6 +212,11 @@ class GaugeModule(Module):
         self.max = float(header.get('max', 100))
         self.unit = header.get('unit', '')
         self.interval = float(header.get('interval', 1.0))
+        colors_raw = header.get('colors')
+        if colors_raw:
+            self.color_thresholds = parse_color_thresholds(colors_raw, f" in gauge '{self.name}'")
+        else:
+            self.color_thresholds = None
         self.warn = float(header.get('warn', self.min + (self.max - self.min) * 0.7))
         self.crit = float(header.get('crit', self.min + (self.max - self.min) * 0.9))
 
@@ -203,11 +247,14 @@ class GaugeModule(Module):
         pct = max(0.0, min(1.0, pct))
         filled = int(bar_w * pct)
 
-        color_name = 'green'
-        if self.value >= self.crit:
-            color_name = 'red'
-        elif self.value >= self.warn:
-            color_name = 'yellow'
+        if self.color_thresholds is not None:
+            color_name = color_for_value(self.color_thresholds, self.value, 'green')
+        else:
+            color_name = 'green'
+            if self.value >= self.crit:
+                color_name = 'red'
+            elif self.value >= self.warn:
+                color_name = 'yellow'
         attr = color_attr(self.colors, color_name)
 
         bar_row = h // 2
@@ -237,6 +284,11 @@ class TimelineModule(Module):
         self.max = float(header['max']) if 'max' in header else None
         self.interval = float(header.get('interval', 1.0))
         self.window = int(header.get('window', 120))
+        colors_raw = header.get('colors')
+        if colors_raw:
+            self.color_thresholds = parse_color_thresholds(colors_raw, f" in timeline '{self.name}'")
+        else:
+            self.color_thresholds = None
 
         values = []
         for block in blocks:
@@ -269,16 +321,22 @@ class TimelineModule(Module):
         if hi == lo:
             hi = lo + 1.0
 
-        attr = color_attr(self.colors, self.color)
+        default_attr = color_attr(self.colors, self.color)
         row = h - 2 if h > 2 else (1 if h > 1 else 0)
-        chars = []
-        for v in series:
-            pct = max(0.0, min(1.0, (v - lo) / (hi - lo)))
-            chars.append(_SPARK_CHARS[int(pct * (len(_SPARK_CHARS) - 1))])
-        if 0 < row < h - 0 and chars:
-            safe_addstr(win, row, 2, ''.join(chars), attr=attr)
+        if 0 < row < h and series:
+            for i, v in enumerate(series):
+                pct = max(0.0, min(1.0, (v - lo) / (hi - lo)))
+                ch = _SPARK_CHARS[int(pct * (len(_SPARK_CHARS) - 1))]
+                if self.color_thresholds is not None:
+                    attr = color_attr(self.colors, color_for_value(self.color_thresholds, v, self.color))
+                else:
+                    attr = default_attr
+                safe_addstr(win, row, 2 + i, ch, attr=attr)
         if series and h > 2:
-            safe_addstr(win, 1, max(2, w - 12), f"{series[-1]:.1f}", 10, attr)
+            last_attr = default_attr
+            if self.color_thresholds is not None:
+                last_attr = color_attr(self.colors, color_for_value(self.color_thresholds, series[-1], self.color))
+            safe_addstr(win, 1, max(2, w - 12), f"{series[-1]:.1f}", 10, last_attr)
         win.noutrefresh()
 
 

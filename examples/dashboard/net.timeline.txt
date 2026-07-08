@@ -2,6 +2,7 @@ LABEL: Network In (Mbps)
 COLOR: cyan
 MIN: 0
 MAX: 100
+COLORS: 0:cyan,50:yellow,75:red
 INTERVAL: 0.5
 WINDOW: 80
 ---

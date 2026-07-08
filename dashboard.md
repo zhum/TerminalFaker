@@ -107,6 +107,18 @@ VALUES: 23,45,67,89,42,30
 Replays `VALUES` in a loop, one value every `INTERVAL` seconds. Bar turns
 yellow at `WARN`, red at `CRIT` (default 70%/90% of the range).
 
+Instead of `WARN`/`CRIT`, give `COLORS` a `value:color` list to pick the bar
+color from arbitrary thresholds:
+
+```
+COLORS: 0:green,70:yellow,90:red
+```
+
+Entries must be ascending by value (out-of-order entries get a warning and
+are auto-sorted). The color used is that of the highest threshold `<=` the
+current value; below the first threshold the bar defaults to green. When
+`COLORS` is present it replaces `WARN`/`CRIT` entirely.
+
 ### `timeline`
 
 ```
@@ -123,6 +135,14 @@ VALUES: 12,15,14,20,18,30,45,22
 Replays `VALUES` into a scrolling sparkline. `MIN`/`MAX` are optional
 (auto-scales to the visible window if omitted). `WINDOW` caps how many
 points are kept.
+
+`COLORS` works the same way as for `gauge` — a `value:color` list, ascending,
+picking the highest threshold `<=` each plotted value (points below the
+first threshold, and the whole line when `COLORS` is omitted, use `COLOR`):
+
+```
+COLORS: 0:green,60:yellow,85:red
+```
 
 ### `log`
 
