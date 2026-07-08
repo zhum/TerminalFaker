@@ -311,32 +311,44 @@ class TimelineModule(Module):
                 self.history = self.history[-self.window:]
 
     def render(self, win):
-        self._draw_frame(win, self.label)
         h, w = win.getmaxyx()
+        default_attr = color_attr(self.colors, self.color)
         plot_w = max(0, w - 4)
         series = self.history[-plot_w:] if plot_w else []
+
+        title = f"{self.label} {series[-1]:.1f}" if series else self.label
+        self._draw_frame(win, title)
 
         lo = self.min if self.min is not None else (min(series) if series else 0.0)
         hi = self.max if self.max is not None else (max(series) if series else 1.0)
         if hi == lo:
             hi = lo + 1.0
 
-        default_attr = color_attr(self.colors, self.color)
-        row = h - 2 if h > 2 else (1 if h > 1 else 0)
-        if 0 < row < h and series:
-            for i, v in enumerate(series):
-                pct = max(0.0, min(1.0, (v - lo) / (hi - lo)))
-                ch = _SPARK_CHARS[int(pct * (len(_SPARK_CHARS) - 1))]
-                if self.color_thresholds is not None:
-                    attr = color_attr(self.colors, color_for_value(self.color_thresholds, v, self.color))
-                else:
-                    attr = default_attr
-                safe_addstr(win, row, 2 + i, ch, attr=attr)
-        if series and h > 2:
-            last_attr = default_attr
+        # Interior plot rows span 1..h-2 (row 0 and h-1 are the box border).
+        # Each column's value fills that many rows bottom-up, in eighth-cell
+        # steps, so the full region height is used instead of one text row.
+        plot_h = max(0, h - 2)
+        bottom_row = h - 2
+        for i, v in enumerate(series):
+            pct = max(0.0, min(1.0, (v - lo) / (hi - lo)))
             if self.color_thresholds is not None:
-                last_attr = color_attr(self.colors, color_for_value(self.color_thresholds, series[-1], self.color))
-            safe_addstr(win, 1, max(2, w - 12), f"{series[-1]:.1f}", 10, last_attr)
+                attr = color_attr(self.colors, color_for_value(self.color_thresholds, v, self.color))
+            else:
+                attr = default_attr
+
+            eighths = round(pct * plot_h * 8)
+            full_rows, rem = divmod(eighths, 8)
+            col = 2 + i
+            for r in range(plot_h):
+                row = bottom_row - r
+                if row < 1:
+                    break
+                if r < full_rows:
+                    safe_addstr(win, row, col, '█', attr=attr)
+                elif r == full_rows and rem > 0:
+                    safe_addstr(win, row, col, _SPARK_CHARS[rem - 1], attr=attr)
+                else:
+                    break
         win.noutrefresh()
 
 
