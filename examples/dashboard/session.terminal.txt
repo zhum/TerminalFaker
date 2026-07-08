@@ -1,0 +1,19 @@
+PROMPT: $
+PROMPT_COLOR: green
+INPUT_COLOR: cyan
+OUTPUT_COLOR: white
+INPUT_SPEED: 0.03
+INITIAL_WAIT: 0
+---
+INPUT: kubectl get pods
+OUTPUT:
+NAME                     READY   STATUS    RESTARTS
+api-7d4f9c-abcde         1/1     Running   0
+worker-6b8d5f-fghij      1/1     Running   0
+WAIT: 2
+
+---
+INPUT: curl -s localhost:8080/health
+OUTPUT:
+{"status": "ok", "uptime": 41231}
+WAIT: 2

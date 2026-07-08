@@ -1,0 +1,46 @@
+TITLE: System Monitor (fake)
+REFRESH_RATE: 0.08
+---
+REGION: cpu_gauge
+TYPE: gauge
+ROW: 0
+COL: 0
+DATA: cpu.gauge.txt
+---
+REGION: mem_gauge
+TYPE: gauge
+ROW: 0
+COL: 1
+DATA: mem.gauge.txt
+---
+REGION: net_chart
+TYPE: timeline
+ROW: 0
+COL: 2
+DATA: net.timeline.txt
+---
+REGION: main_log
+TYPE: log
+ROW: 1
+COL: 0
+COLSPAN: 2
+DATA: system.log.txt
+---
+REGION: status
+TYPE: status
+ROW: 1
+COL: 2
+DATA: services.status.txt
+---
+REGION: term
+TYPE: terminal
+ROW: 2
+COL: 0
+COLSPAN: 2
+DATA: session.terminal.txt
+---
+REGION: matrix
+TYPE: matrix
+ROW: 2
+COL: 2
+DATA: matrix.txt

@@ -73,12 +73,14 @@ class Cycle:
 class MockTerminal:
     """Generates mock terminal output"""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, output=None):
         self.config = config
+        self.output = output if output is not None else sys.stdout
 
     def clear_screen(self):
         """Clear the terminal screen"""
-        os.system('clear' if os.name != 'nt' else 'cls')
+        if self.output is sys.stdout:
+            os.system('clear' if os.name != 'nt' else 'cls')
 
     def get_color(self, color_name: str) -> str:
         """Get ANSI code(s) for a color name, supporting combos like 'bold green';
@@ -123,13 +125,13 @@ class MockTerminal:
 
         for seg_text, seg_color in segments:
             if seg_color != active_color:
-                sys.stdout.write(self.get_color(seg_color))
-                sys.stdout.flush()
+                self.output.write(self.get_color(seg_color))
+                self.output.flush()
                 active_color = seg_color
 
             for char in seg_text:
-                sys.stdout.write(char)
-                sys.stdout.flush()
+                self.output.write(char)
+                self.output.flush()
 
                 # Calculate delay for this character
                 if self.config.input_speed_randomness:
@@ -139,14 +141,14 @@ class MockTerminal:
 
                 time.sleep(delay)
 
-        sys.stdout.write(COLORS['reset'])
-        sys.stdout.flush()
+        self.output.write(COLORS['reset'])
+        self.output.flush()
 
     def print_output(self, text: str, color: str):
         """Print output, honoring optional inline {colorname} markup"""
         segments = self.parse_colored_text(text, color)
         rendered = ''.join(f"{self.get_color(seg_color)}{seg_text}" for seg_text, seg_color in segments)
-        print(f"{rendered}{COLORS['reset']}")
+        print(f"{rendered}{COLORS['reset']}", file=self.output)
 
     def print_prompt(self, prompt: str = None, prompt_color: str = None):
         """Print the prompt, optionally overriding text/color for this cycle"""
@@ -157,12 +159,12 @@ class MockTerminal:
 
         for seg_text, seg_color in segments:
             if seg_color != active_color:
-                sys.stdout.write(self.get_color(seg_color))
-                sys.stdout.flush()
+                self.output.write(self.get_color(seg_color))
+                self.output.flush()
                 active_color = seg_color
-            sys.stdout.write(seg_text)
-        sys.stdout.write(COLORS['reset'])
-        sys.stdout.flush()
+            self.output.write(seg_text)
+        self.output.write(COLORS['reset'])
+        self.output.flush()
 
     def run_cycle(self, cycle: Cycle):
         """Run a single input/output cycle"""
@@ -172,7 +174,7 @@ class MockTerminal:
 
         # Type user input
         self.type_text(cycle.user_input, self.config.input_color)
-        print()  # Newline after input
+        print(file=self.output)  # Newline after input
 
         # Print output
         if cycle.output:
@@ -181,7 +183,7 @@ class MockTerminal:
                 if line:  # Skip empty lines in iteration, but preserve them in output
                     self.print_output(line, self.config.output_color)
                 else:
-                    print()
+                    print(file=self.output)
 
         # Wait before next cycle
         if cycle.wait_after > 0:
@@ -208,17 +210,23 @@ class MockTerminal:
             self.run_cycle(cycle)
 
 
-def parse_input_file(filepath: str) -> Tuple[Config, List[Cycle]]:
-    """Parse the input file and return config and cycles"""
+def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[Cycle]]:
+    """Parse the input file and return config and cycles.
+
+    If `content` is given, it is parsed directly and `filepath` is only used
+    for error messages (used by callers that need to pre-process the file,
+    e.g. to resolve INCLUDE directives, before handing it to this parser).
+    """
     config = Config()
     cycles = []
 
-    try:
-        with open(filepath, 'r') as f:
-            content = f.read()
-    except FileNotFoundError:
-        print(f"Error: File '{filepath}' not found.")
-        sys.exit(1)
+    if content is None:
+        try:
+            with open(filepath, 'r') as f:
+                content = f.read()
+        except FileNotFoundError:
+            print(f"Error: File '{filepath}' not found.")
+            sys.exit(1)
 
     # Split by cycle separator
     sections = content.split('---')

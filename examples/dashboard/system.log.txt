@@ -1,0 +1,12 @@
+INTERVAL_MIN: 0.3
+INTERVAL_MAX: 1.5
+LOOP: true
+---
+[INFO] service started on :8080
+[INFO] worker pool warmed up (8 workers)
+[WARN] high memory usage on node-3 (81%)
+[INFO] request handled in 42ms
+INCLUDE: shared_errors.log
+[INFO] retrying upstream connection
+[INFO] connection restored
+[INFO] health check ok

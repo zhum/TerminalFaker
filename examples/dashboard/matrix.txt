@@ -1,0 +1,3 @@
+CHARSET: katakana
+SPEED: 0.05
+COLOR: green

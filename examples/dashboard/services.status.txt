@@ -1,0 +1,13 @@
+INTERVAL: 3.0
+---
+NAME: API
+STATES: green,green,yellow,green
+---
+NAME: DB
+STATES: green,red,green
+---
+NAME: Cache
+STATES: green
+---
+NAME: Queue
+STATES: green,green,green,yellow

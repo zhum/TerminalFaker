@@ -1,0 +1,2 @@
+[ERROR] connection refused: db-replica-2:5432
+[ERROR] timeout waiting for upstream response
