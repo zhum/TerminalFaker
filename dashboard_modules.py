@@ -273,6 +273,10 @@ class GaugeModule(Module):
 # ---------------------------------------------------------------------------
 
 _SPARK_CHARS = '▁▂▃▄▅▆▇█'
+# 3-level partial-row resolution for STYLE: ascii ('#' is the full-row char,
+# used the same way _SPARK_CHARS[-1] ('█') is unused below since a fully
+# filled row is drawn with fill_char directly).
+_ASCII_LEVELS = ('_', '=', '#')
 
 
 class TimelineModule(Module):
@@ -289,6 +293,12 @@ class TimelineModule(Module):
             self.color_thresholds = parse_color_thresholds(colors_raw, f" in timeline '{self.name}'")
         else:
             self.color_thresholds = None
+
+        style = header.get('style', 'filled').lower()
+        if style not in ('filled', 'dotted', 'ascii'):
+            print(f"Warning: unknown STYLE '{style}' in timeline '{self.name}', using 'filled'")
+            style = 'filled'
+        self.style = style
 
         values = []
         for block in blocks:
@@ -310,11 +320,19 @@ class TimelineModule(Module):
             if len(self.history) > self.window:
                 self.history = self.history[-self.window:]
 
+    def _attr_for(self, default_attr, v):
+        if self.color_thresholds is not None:
+            return color_attr(self.colors, color_for_value(self.color_thresholds, v, self.color))
+        return default_attr
+
     def render(self, win):
         h, w = win.getmaxyx()
         default_attr = color_attr(self.colors, self.color)
         plot_w = max(0, w - 4)
-        series = self.history[-plot_w:] if plot_w else []
+        # A braille column packs 2 samples, so pull twice as much history to
+        # fill the same on-screen width as the 1-sample-per-column styles.
+        needed = plot_w * 2 if self.style == 'dotted' else plot_w
+        series = self.history[-needed:] if needed else []
 
         title = f"{self.label} {series[-1]:.1f}" if series else self.label
         self._draw_frame(win, title)
@@ -324,32 +342,67 @@ class TimelineModule(Module):
         if hi == lo:
             hi = lo + 1.0
 
-        # Interior plot rows span 1..h-2 (row 0 and h-1 are the box border).
-        # Each column's value fills that many rows bottom-up, in eighth-cell
-        # steps, so the full region height is used instead of one text row.
+        # Interior plot rows span 1..h-2 (row 0 and h-1 are the box border),
+        # so the full region height is used regardless of window size.
         plot_h = max(0, h - 2)
         bottom_row = h - 2
-        for i, v in enumerate(series):
-            pct = max(0.0, min(1.0, (v - lo) / (hi - lo)))
-            if self.color_thresholds is not None:
-                attr = color_attr(self.colors, color_for_value(self.color_thresholds, v, self.color))
-            else:
-                attr = default_attr
 
-            eighths = round(pct * plot_h * 8)
-            full_rows, rem = divmod(eighths, 8)
-            col = 2 + i
+        if self.style == 'dotted':
+            self._render_dotted(win, series, lo, hi, plot_h, bottom_row, default_attr)
+        else:
+            fill_char = '#' if self.style == 'ascii' else '█'
+            levels = _ASCII_LEVELS if self.style == 'ascii' else _SPARK_CHARS
+            for i, v in enumerate(series):
+                pct = max(0.0, min(1.0, (v - lo) / (hi - lo)))
+                attr = self._attr_for(default_attr, v)
+                steps = round(pct * plot_h * len(levels))
+                full_rows, rem = divmod(steps, len(levels))
+                col = 2 + i
+                for r in range(plot_h):
+                    row = bottom_row - r
+                    if row < 1:
+                        break
+                    if r < full_rows:
+                        safe_addstr(win, row, col, fill_char, attr=attr)
+                    elif r == full_rows and rem > 0:
+                        safe_addstr(win, row, col, levels[rem - 1], attr=attr)
+                    else:
+                        break
+        win.noutrefresh()
+
+    # Visual dot slots top-to-bottom within a braille cell map to these dot
+    # bits (see Unicode Braille Patterns block, U+2800 + bitmask).
+    _BRAILLE_LEFT_BITS = (0, 1, 2, 6)
+    _BRAILLE_RIGHT_BITS = (3, 4, 5, 7)
+
+    def _render_dotted(self, win, series, lo, hi, plot_h, bottom_row, default_attr):
+        def filled_dots(v):
+            pct = max(0.0, min(1.0, (v - lo) / (hi - lo)))
+            return round(pct * plot_h * 4)
+
+        for pair_idx in range(0, len(series), 2):
+            left = series[pair_idx]
+            right = series[pair_idx + 1] if pair_idx + 1 < len(series) else None
+            filled_left = filled_dots(left)
+            filled_right = filled_dots(right) if right is not None else 0
+            attr = self._attr_for(default_attr, right if right is not None else left)
+            col = 2 + pair_idx // 2
+
             for r in range(plot_h):
                 row = bottom_row - r
                 if row < 1:
                     break
-                if r < full_rows:
-                    safe_addstr(win, row, col, '█', attr=attr)
-                elif r == full_rows and rem > 0:
-                    safe_addstr(win, row, col, _SPARK_CHARS[rem - 1], attr=attr)
-                else:
+                code = 0
+                for v in range(4):
+                    dot_index = r * 4 + (3 - v)
+                    if dot_index < filled_left:
+                        code |= 1 << self._BRAILLE_LEFT_BITS[v]
+                    if right is not None and dot_index < filled_right:
+                        code |= 1 << self._BRAILLE_RIGHT_BITS[v]
+                if code:
+                    safe_addstr(win, row, col, chr(0x2800 + code), attr=attr)
+                elif filled_left == 0 and filled_right == 0:
                     break
-        win.noutrefresh()
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 LABEL: Network In (Mbps)
 COLOR: cyan
+STYLE: dotted
 MIN: 0
 MAX: 100
 COLORS: 0:blue,50:cyan,75:green

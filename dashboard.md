@@ -144,6 +144,18 @@ first threshold, and the whole line when `COLORS` is omitted, use `COLOR`):
 COLORS: 0:green,60:yellow,85:red
 ```
 
+`STYLE` picks how the plot is drawn (default `filled`):
+
+| Style | Look |
+|---|---|
+| `filled` | Solid unicode blocks (`█▁▂▃▄▅▆▇`), one column per value, eighth-cell vertical resolution. |
+| `dotted` | Braille dot grid (2 values per character cell), higher resolution, half the on-screen width per value. |
+| `ascii` | Plain-ASCII fill (`_ = #`), one column per value, three-level vertical resolution — for terminals without unicode/braille support. |
+
+```
+STYLE: dotted
+```
+
 ### `log`
 
 ```
