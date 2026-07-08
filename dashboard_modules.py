@@ -17,6 +17,7 @@ import random
 import re
 import threading
 import time
+import unicodedata
 
 # mock_terminal.py must stay importable and runnable completely on its own;
 # this is the only direction the dependency goes (dashboard -> mock_terminal).
@@ -506,6 +507,14 @@ _CHARSETS = {
 }
 
 
+def _display_width(ch):
+    """Terminal cell width of one character. East-Asian wide/fullwidth
+    glyphs (e.g. katakana) occupy 2 columns even though curses' cell model
+    only advances the cursor by 1, so callers must account for this
+    themselves to avoid the terminal auto-wrapping past a window's edge."""
+    return 2 if unicodedata.east_asian_width(ch) in ('W', 'F') else 1
+
+
 class MatrixModule(Module):
     def parse(self, text):
         header, blocks = parse_kv_body(text)
@@ -553,6 +562,12 @@ class MatrixModule(Module):
             y = self.columns[i]
             if 0 <= y < plot_h:
                 glyph = random.choice(self.words) if self.words else random.choice(self.charset)
+                # A wide glyph landing on the last plot column would make
+                # the terminal auto-wrap and overwrite column 0 of whatever
+                # sits next in the real layout (e.g. the region below) -
+                # skip it there instead.
+                if i + _display_width(glyph[0]) > plot_w:
+                    continue
                 safe_addstr(win, 1 + y, 2 + i, glyph, max(1, plot_w - i), attr)
         win.noutrefresh()
 
