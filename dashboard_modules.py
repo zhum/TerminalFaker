@@ -544,7 +544,7 @@ class MatrixModule(Module):
             self.columns = [random.randint(-plot_h, 0) for _ in range(max(plot_w, 1))]
 
     def render(self, win):
-        self._draw_frame(win, self.name)
+        win.erase()
         h, w = win.getmaxyx()
         # Interior only (row 0/h-1 and col 0/w-1 are the box border), same
         # inset every other module uses, so the rain stays inside its frame.
@@ -562,13 +562,20 @@ class MatrixModule(Module):
             y = self.columns[i]
             if 0 <= y < plot_h:
                 glyph = random.choice(self.words) if self.words else random.choice(self.charset)
-                # A wide glyph landing on the last plot column would make
-                # the terminal auto-wrap and overwrite column 0 of whatever
-                # sits next in the real layout (e.g. the region below) -
-                # skip it there instead.
+                # A wide glyph (e.g. katakana, 2 terminal cells) landing on
+                # the last plot column would make the terminal auto-wrap
+                # into whatever sits next in the real layout - skip it there.
                 if i + _display_width(glyph[0]) > plot_w:
                     continue
                 safe_addstr(win, 1 + y, 2 + i, glyph, max(1, plot_w - i), attr)
+
+        # Box/title drawn *after* the rain, not before: a wide glyph near
+        # the edge can make ncursesw advance the cursor past our own column
+        # math and bleed into the border cell within this same frame: this
+        # guarantees the frame always wins that race instead of flickering.
+        win.box()
+        if self.name and w > 4:
+            safe_addstr(win, 0, 2, f" {self.name} ", w - 4)
         win.noutrefresh()
 
 
