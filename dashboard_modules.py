@@ -318,8 +318,11 @@ class TimelineModule(Module):
             self.last_tick = now
             self.idx = (self.idx + 1) % len(self.values)
             self.history.append(self.values[self.idx])
-            if len(self.history) > self.window:
-                self.history = self.history[-self.window:]
+            # Cap generously; render() trims to the exact width needed each
+            # frame, so this only bounds unbounded memory growth over time.
+            cap = max(self.window, 4096)
+            if len(self.history) > cap:
+                self.history = self.history[-cap:]
 
     def _attr_for(self, default_attr, v):
         if self.color_thresholds is not None:
@@ -497,6 +500,67 @@ class StatusModule(Module):
 
 
 # ---------------------------------------------------------------------------
+# text
+# ---------------------------------------------------------------------------
+
+_VAR_RE = re.compile(r'\{(\w+)\}')
+
+
+class TextModule(Module):
+    def parse(self, text):
+        header, blocks = parse_kv_body(text)
+        self.text = header.get('text', '')
+        self.color = header.get('color', '')
+        self.interval = float(header.get('interval', 1.0))
+
+        self.vars = {}
+        for var_name in _VAR_RE.findall(self.text):
+            self.vars[var_name] = {'values': ['?'], 'idx': 0}
+
+        for block in blocks:
+            var_name = None
+            values = []
+            for line in block.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('#') or ':' not in line:
+                    continue
+                key, value = line.split(':', 1)
+                key = key.strip().lower()
+                value = value.strip()
+                if key == 'var':
+                    var_name = value
+                elif key == 'values':
+                    values = [v.strip() for v in value.split(',') if v.strip()]
+            if var_name in self.vars:
+                self.vars[var_name] = {'values': values or ['?'], 'idx': 0}
+
+        self.last_tick = 0.0
+
+    def update(self, now):
+        if now - self.last_tick >= self.interval:
+            self.last_tick = now
+            for v in self.vars.values():
+                v['idx'] = (v['idx'] + 1) % len(v['values'])
+
+    def render(self, win):
+        self._draw_frame(win, self.name)
+        h, w = win.getmaxyx()
+        rendered = self.text
+        for var_name, v in self.vars.items():
+            rendered = rendered.replace('{' + var_name + '}', str(v['values'][v['idx']]))
+
+        attr = color_attr(self.colors, self.color) if self.color else curses.A_NORMAL
+        plot_w = max(0, w - 4)
+        lines = rendered.split('\\n')
+        for i, line in enumerate(lines):
+            row = 1 + i
+            if row >= h - 1:
+                break
+            safe_addstr(win, row, 2, line, plot_w, attr)
+        win.noutrefresh()
+
+
+# ---------------------------------------------------------------------------
 # matrix rain
 # ---------------------------------------------------------------------------
 
@@ -645,10 +709,12 @@ class TerminalModule(Module):
 
     def _run_loop(self):
         term = mock_terminal.MockTerminal(self._config, output=self._writer)
+        print_prompt = True
         while True:
             if self._cycles:
-                term.run(self._cycles, initial_wait=0)
+                term.run(self._cycles, initial_wait=0, print_prompt=print_prompt)
             time.sleep(1.0)
+            print_prompt = False
 
     def update(self, now):
         if not self._started:
@@ -675,6 +741,7 @@ MODULE_REGISTRY = {
     'timeline': TimelineModule,
     'log': LogModule,
     'status': StatusModule,
+    'text': TextModule,
     'matrix': MatrixModule,
     'terminal': TerminalModule,
 }

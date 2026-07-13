@@ -1,0 +1,12 @@
+TEXT: Uptime: {uptime}   Load avg: {load}   Users: {users}
+COLOR: cyan
+INTERVAL: 2.0
+---
+VAR: uptime
+VALUES: 4d 02:11, 4d 02:13, 4d 02:15, 4d 02:17
+---
+VAR: load
+VALUES: 0.42 0.38 0.31, 0.55 0.40 0.32, 0.61 0.44 0.33, 0.48 0.39 0.30
+---
+VAR: users
+VALUES: 3, 3, 4, 3

@@ -44,3 +44,10 @@ TYPE: matrix
 ROW: 2
 COL: 2
 DATA: matrix.txt
+---
+REGION: uptime
+TYPE: text
+ROW: 3
+COL: 0
+COLSPAN: 3
+DATA: uptime.text.txt
