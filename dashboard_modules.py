@@ -504,12 +504,27 @@ class StatusModule(Module):
 # ---------------------------------------------------------------------------
 
 _VAR_RE = re.compile(r'\{(\w+)\}')
+_TEXT_KV_RE = re.compile(r'(?im)^text:(.*)$')
+
+
+def _raw_text_value(text):
+    """Extract the `text:` value keeping leading spaces/tabs (only the
+    header block, before the first `---`), unlike parse_kv_body which
+    strips every value."""
+    header_block = text.split('---', 1)[0]
+    m = _TEXT_KV_RE.search(header_block)
+    if not m:
+        return None
+    value = m.group(1)
+    if value.startswith(' '):
+        value = value[1:]
+    return value.rstrip('\r')
 
 
 class TextModule(Module):
     def parse(self, text):
         header, blocks = parse_kv_body(text)
-        self.text = header.get('text', '')
+        self.text = _raw_text_value(text) or header.get('text', '')
         self.color = header.get('color', '')
         self.interval = float(header.get('interval', 1.0))
 
