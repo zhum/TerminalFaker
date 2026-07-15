@@ -166,8 +166,11 @@ class MockTerminal:
         self.output.write(COLORS['reset'])
         self.output.flush()
 
-    def run_cycle(self, cycle: Cycle):
+    def run_cycle(self, cycle: Cycle, print_prompt: bool = True):
         """Run a single input/output cycle"""
+
+        if print_prompt:
+            self.print_prompt(cycle.prompt, cycle.prompt_color)
 
         if cycle.type_delay > 0:
             time.sleep(cycle.type_delay)
@@ -189,10 +192,8 @@ class MockTerminal:
         if cycle.wait_after > 0:
             time.sleep(cycle.wait_after)
 
-        self.print_prompt(cycle.prompt, cycle.prompt_color)
 
-
-    def run(self, cycles: List[Cycle], initial_wait: float = None):
+    def run(self, cycles: List[Cycle], initial_wait: float = None, print_prompt: bool = True):
         """Run the full terminal sequence"""
         if initial_wait is None:
             initial_wait = self.config.initial_wait
@@ -204,10 +205,9 @@ class MockTerminal:
             # print(f"Starting in {initial_wait} seconds...", flush=True)
             time.sleep(initial_wait)
 
-        self.print_prompt(cycles[0].prompt, cycles[0].prompt_color)
         # Run all cycles
-        for cycle in cycles:
-            self.run_cycle(cycle)
+        for i, cycle in enumerate(cycles):
+            self.run_cycle(cycle, print_prompt=(print_prompt or i > 0))
 
 
 def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[Cycle]]:
@@ -415,10 +415,8 @@ Example with randomness:
     terminal = MockTerminal(config)
 
     try:
-        if not args.no_clear:
-            terminal.run(cycles, initial_wait=config.initial_wait)
-        else:
-            terminal.run(cycles, initial_wait=0)
+        wt = config.initial_wait if not args.no_clear else 0
+        terminal.run(cycles, initial_wait=wt)
     except KeyboardInterrupt:
         print("\n\nInterrupted by user.")
         sys.exit(0)
