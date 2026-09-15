@@ -61,10 +61,13 @@ class Config:
 
 @dataclass
 class Cycle:
-    """A single input/output cycle"""
-    user_input: str
-    output: str
-    wait_after: float = 2.0
+    """A single input/output cycle.
+
+    `actions` is an ordered list of ('input', text) / ('output', text) /
+    ('wait', seconds) tuples, preserving file order so WAIT can land
+    anywhere in the sequence (before INPUT, mid-OUTPUT, at the end, etc).
+    """
+    actions: list = None
     prompt: str = None
     prompt_color: str = None
     type_delay: float = 0.05
@@ -167,7 +170,7 @@ class MockTerminal:
         self.output.flush()
 
     def run_cycle(self, cycle: Cycle, print_prompt: bool = True):
-        """Run a single input/output cycle"""
+        """Run a single input/output cycle, executing its actions in file order"""
 
         if print_prompt:
             self.print_prompt(cycle.prompt, cycle.prompt_color)
@@ -175,22 +178,20 @@ class MockTerminal:
         if cycle.type_delay > 0:
             time.sleep(cycle.type_delay)
 
-        # Type user input
-        self.type_text(cycle.user_input, self.config.input_color)
-        print(file=self.output)  # Newline after input
-
-        # Print output
-        if cycle.output:
-            output_lines = cycle.output.split('\n')
-            for line in output_lines:
-                if line:  # Skip empty lines in iteration, but preserve them in output
-                    self.print_output(line, self.config.output_color)
-                else:
-                    print(file=self.output)
-
-        # Wait before next cycle
-        if cycle.wait_after > 0:
-            time.sleep(cycle.wait_after)
+        for action, value in cycle.actions:
+            if action == 'input':
+                self.type_text(value, self.config.input_color)
+                print(file=self.output)  # Newline after input
+            elif action == 'output':
+                output_lines = value.split('\n')
+                for line in output_lines:
+                    if line:  # Skip empty lines in iteration, but preserve them in output
+                        self.print_output(line, self.config.output_color)
+                    else:
+                        print(file=self.output)
+            elif action == 'wait':
+                if value > 0:
+                    time.sleep(value)
 
 
     def run(self, cycles: List[Cycle], initial_wait: float = None, print_prompt: bool = True):
@@ -282,26 +283,25 @@ def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[C
             continue
 
         cycle_config = {
-            'input': '',
-            'output': '',
-            'wait': 2.0,
-            'wait': 2.0,
+            'actions': [],
             'type_delay': 0.2,
             'prompt': None,
             'prompt_color': None,
+            'has_input': False,
         }
 
         lines = section.split('\n')
         i = 0
         while i < len(lines):
             line = lines[i]
-            
+
             if line.strip().startswith('#') or not line.strip():
                 i += 1
                 continue
 
             if line.startswith('INPUT:'):
-                cycle_config['input'] = line.replace('INPUT:', '', 1).strip()
+                cycle_config['actions'].append(('input', line.replace('INPUT:', '', 1).strip()))
+                cycle_config['has_input'] = True
             elif line.startswith('OUTPUT:'):
                 # Collect multi-line output
                 output_lines = []
@@ -311,11 +311,11 @@ def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[C
                         break
                     output_lines.append(lines[i])
                     i += 1
-                cycle_config['output'] = '\n'.join(output_lines)
+                cycle_config['actions'].append(('output', '\n'.join(output_lines)))
                 continue
             elif line.startswith('WAIT:'):
                 try:
-                    cycle_config['wait'] = float(line.replace('WAIT:', '', 1).strip())
+                    cycle_config['actions'].append(('wait', float(line.replace('WAIT:', '', 1).strip())))
                 except ValueError:
                     pass
             elif line.startswith('TYPE_DELAY:'):
@@ -330,11 +330,11 @@ def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[C
 
             i += 1
 
-        if cycle_config['input']:
+        if cycle_config['has_input']:
+            if not any(action == 'wait' for action, _ in cycle_config['actions']):
+                cycle_config['actions'].append(('wait', 2.0))
             cycles.append(Cycle(
-                user_input=cycle_config['input'],
-                output=cycle_config['output'],
-                wait_after=cycle_config['wait'],
+                actions=cycle_config['actions'],
                 prompt=cycle_config['prompt'],
                 prompt_color=cycle_config['prompt_color'],
                 type_delay=cycle_config['type_delay']
