@@ -1,6 +1,6 @@
 # Mock Terminal Generator
 
-Copyright (c) 2026 Sergey Zhumatiy <sergzhum@gmail.com> 
+Copyright (c) 2026 Sergey Zhumatiy <sergzhum@gmail.com>
 
 This work is licensed under the Creative Commons Attribution 4.0 International License. 
 To view a copy of this license, visit http://creativecommons.org 
@@ -18,7 +18,7 @@ then plays your scenario.
 
 - **Color Support**: Style prompts, input, and output with ANSI colors
 - **Typing Animation**: User input appears with character-by-character animation
-- **Configurable Timing**: Control initial wait, typing speed, and delays between cycles
+- **Configurable Timing**: Control initial wait, typing speed, and delays between commands
 - **Simple Format**: Easy-to-read text format for defining sequences
 - **CLI Options**: Override file settings with command-line arguments
 
@@ -48,9 +48,16 @@ python mock_terminal.py demo.txt --wait 3
 
 ## Input File Format
 
+A file has two parts: a configuration section, then a single `---` separator,
+then a stream of instructions. Instructions are interpreted **one at a time,
+in file order** — there's no cycle/block grouping and no repeated `---`
+needed between commands. (A stray `---` line in the instruction stream
+matches no instruction keyword, so it's silently ignored — handy as a visual
+divider between commands if you like the look.)
+
 ### Configuration Section
 
-The first section (before any `---`) defines global settings:
+The section before the first `---` defines global settings:
 
 ```
 PROMPT: user@host:~ $ 
@@ -75,12 +82,11 @@ INITIAL_WAIT: 5
 | `INPUT_SPEED_MAX` | `0.1` | Maximum delay when randomness is enabled |
 | `INITIAL_WAIT` | `5` | Seconds to wait before starting |
 
-### Cycles
+### Instructions
 
-Each cycle is separated by `---` and contains:
+The instruction stream is a flat sequence of directives, executed in order:
 
 ```
----
 INPUT: command to run
 OUTPUT:
 This is the command output
@@ -88,13 +94,31 @@ Can span multiple lines
 WAIT: 2
 ```
 
-**Fields:**
+**Directives:**
 
-- `INPUT:` (required) - The command the user types
-- `OUTPUT:` (optional) - The output from the command, can be multi-line
-- `WAIT:` (optional) - Seconds to pause after this cycle (default: 2)
-- `PROMPT:` (optional) - Override prompt text for this cycle only (default: global `PROMPT`)
-- `PROMPT_COLOR:` (optional) - Override prompt color for this cycle only (default: global `PROMPT_COLOR`)
+- `INPUT:` - Types a command at the prompt (prompt is printed first)
+- `OUTPUT:` (optional, multi-line) - Prints command output until the next directive line
+- `WAIT:` - Pauses for the given number of seconds. If an `INPUT:` isn't followed by an
+  explicit `WAIT:` before the next `INPUT:` (or end of file), a default 2s wait is inserted.
+- `PROMPT:` - Sets the prompt text used for subsequent `INPUT:`s. **Sticks until changed
+  again** (it's not reset per-command) — set it back to reproduce the global `PROMPT` if needed.
+- `PROMPT_COLOR:` - Same, for prompt color.
+- `TYPE_DELAY:` - Seconds to pause after printing the prompt, before typing starts, for
+  subsequent `INPUT:`s. Sticks until changed.
+
+Since `OUTPUT:` collects lines until it sees one of the directive keywords, a literal
+output line that happens to start with `WAIT:`, `INPUT:`, `PROMPT:`, `PROMPT_COLOR:`,
+or `TYPE_DELAY:` needs a backslash escape or it will be misread as a directive and end
+the output early:
+
+```
+INPUT: cat status.txt
+OUTPUT:
+\WAIT: 30s remaining
+Job still running
+```
+
+The leading `\` is stripped and the rest of the line is emitted as-is.
 
 ### Color Options
 
@@ -116,7 +140,6 @@ Combos work too (`{bold red}`). `{reset}` or `{default}` reverts to that field's
 Tags don't carry across lines — close them before the line ends.
 
 ```
----
 INPUT: rm -rf {red}important_folder{reset}
 OUTPUT:
 {green}Success:{reset} 12 files removed
@@ -128,7 +151,6 @@ To show a literal `{...}` (e.g. JSON, or a color-name word you don't want treate
 escape the braces with `\{` and `\}`:
 
 ```
----
 INPUT: curl -s api.example.com/status
 OUTPUT:
 \{"status": "red", "code": 200\}
@@ -144,14 +166,12 @@ PROMPT: $
 PROMPT_COLOR: green
 INPUT_COLOR: cyan
 INPUT_SPEED: 0.05
-
 ---
 INPUT: echo "Hello World"
 OUTPUT:
 Hello World
 WAIT: 2
 
----
 INPUT: date
 OUTPUT:
 Wed Jul 08 12:34:56 PDT 2026
@@ -167,7 +187,6 @@ INPUT_COLOR: cyan
 INPUT_SPEED_RANDOMNESS: true
 INPUT_SPEED_MIN: 0.02
 INPUT_SPEED_MAX: 0.08
-
 ---
 INPUT: npm install
 OUTPUT:
@@ -212,21 +231,21 @@ PROMPT: root@server:/var/www#
 PROMPT_COLOR: red
 ```
 
-### Per-Cycle Prompt Change
+### Changing the Prompt Mid-Session
 
-Override prompt text/color for just one cycle — useful for simulating `su`, `ssh`, `docker exec`, venv activation, etc. Unset fields fall back to the global config.
+`PROMPT:`/`PROMPT_COLOR:` change the running prompt for every `INPUT:` that follows,
+until changed again — useful for simulating `su`, `ssh`, `docker exec`, venv activation,
+etc. They do **not** auto-revert; switch back explicitly when the simulated session ends.
 
 ```
 PROMPT: user@laptop:~ $
 PROMPT_COLOR: cyan
 
----
 INPUT: ssh admin@server
 OUTPUT:
 Welcome to server
 WAIT: 1
 
----
 PROMPT: admin@server:~#
 PROMPT_COLOR: red
 INPUT: whoami
@@ -234,14 +253,16 @@ OUTPUT:
 admin
 WAIT: 2
 
----
+PROMPT: user@laptop:~ $
+PROMPT_COLOR: cyan
 INPUT: exit
 OUTPUT:
 logout
 WAIT: 1
 ```
 
-The third cycle (`exit`) has no `PROMPT:`/`PROMPT_COLOR:`, so it reverts to the global prompt.
+Without that last `PROMPT:`/`PROMPT_COLOR:` reset, `exit` would still show at the
+`admin@server:~#` prompt.
 
 ### Multi-line Output
 
@@ -382,6 +403,11 @@ Adjust `INPUT_SPEED`:
 ### Output not displaying correctly
 
 Check for missing colons in the input file. Each field must have `FIELD:` format.
+
+### Output cuts off early on a line like `WAIT: ...` or `INPUT: ...`
+
+`OUTPUT:` collection ends at any line starting with a directive keyword. If the output
+text itself needs to start with one of those keywords, escape it: `\WAIT: ...`.
 
 ### Prompt appears twice
 

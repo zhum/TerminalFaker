@@ -716,9 +716,9 @@ def _parse_ansi_lines(raw, colors):
 
 class TerminalModule(Module):
     def parse(self, text):
-        config, cycles = mock_terminal.parse_input_file(self.data_path, content=text)
+        config, actions = mock_terminal.parse_input_file(self.data_path, content=text)
         self._config = config
-        self._cycles = cycles
+        self._actions = actions
         self._writer = _AnsiWriter()
         self._started = False
 
@@ -726,8 +726,8 @@ class TerminalModule(Module):
         term = mock_terminal.MockTerminal(self._config, output=self._writer)
         print_prompt = True
         while True:
-            if self._cycles:
-                term.run(self._cycles, initial_wait=0, print_prompt=print_prompt)
+            if self._actions:
+                term.run(self._actions, initial_wait=0, print_prompt=print_prompt)
             time.sleep(1.0)
             print_prompt = False
 

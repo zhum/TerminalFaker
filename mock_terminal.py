@@ -59,20 +59,6 @@ class Config:
     input_speed_max: float = 0.1
 
 
-@dataclass
-class Cycle:
-    """A single input/output cycle.
-
-    `actions` is an ordered list of ('input', text) / ('output', text) /
-    ('wait', seconds) tuples, preserving file order so WAIT can land
-    anywhere in the sequence (before INPUT, mid-OUTPUT, at the end, etc).
-    """
-    actions: list = None
-    prompt: str = None
-    prompt_color: str = None
-    type_delay: float = 0.05
-
-
 class MockTerminal:
     """Generates mock terminal output"""
 
@@ -169,17 +155,45 @@ class MockTerminal:
         self.output.write(COLORS['reset'])
         self.output.flush()
 
-    def run_cycle(self, cycle: Cycle, print_prompt: bool = True):
-        """Run a single input/output cycle, executing its actions in file order"""
+    def run(self, actions: List[Tuple[str, object]], initial_wait: float = None, print_prompt: bool = True):
+        """Run the full instruction sequence, executing actions one by one in file order.
 
-        if print_prompt:
-            self.print_prompt(cycle.prompt, cycle.prompt_color)
+        `actions` is a flat, ordered list of ('input'|'output'|'wait'|'prompt'|
+        'prompt_color'|'type_delay', value) tuples. 'prompt'/'prompt_color'/
+        'type_delay' update running state that is applied to subsequent INPUT
+        actions; the prompt is (re)printed before every INPUT except possibly
+        the very first one, controlled by `print_prompt`.
+        """
+        if initial_wait is None:
+            initial_wait = self.config.initial_wait
 
-        if cycle.type_delay > 0:
-            time.sleep(cycle.type_delay)
+        self.clear_screen()
 
-        for action, value in cycle.actions:
-            if action == 'input':
+        # Initial wait before starting
+        if initial_wait > 0:
+            time.sleep(initial_wait)
+
+        prompt = None
+        prompt_color = None
+        type_delay = 0.2
+        first_input = True
+
+        for action, value in actions:
+            if action == 'prompt':
+                prompt = value
+            elif action == 'prompt_color':
+                prompt_color = value
+            elif action == 'type_delay':
+                type_delay = value
+            elif action == 'wait':
+                if value > 0:
+                    time.sleep(value)
+            elif action == 'input':
+                if not first_input or print_prompt:
+                    self.print_prompt(prompt, prompt_color)
+                first_input = False
+                if type_delay > 0:
+                    time.sleep(type_delay)
                 self.type_text(value, self.config.input_color)
                 print(file=self.output)  # Newline after input
             elif action == 'output':
@@ -189,37 +203,22 @@ class MockTerminal:
                         self.print_output(line, self.config.output_color)
                     else:
                         print(file=self.output)
-            elif action == 'wait':
-                if value > 0:
-                    time.sleep(value)
 
 
-    def run(self, cycles: List[Cycle], initial_wait: float = None, print_prompt: bool = True):
-        """Run the full terminal sequence"""
-        if initial_wait is None:
-            initial_wait = self.config.initial_wait
+def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[Tuple[str, object]]]:
+    """Parse the input file and return config and a flat, ordered list of actions.
 
-        self.clear_screen()
-
-        # Initial wait before starting
-        if initial_wait > 0:
-            # print(f"Starting in {initial_wait} seconds...", flush=True)
-            time.sleep(initial_wait)
-
-        # Run all cycles
-        for i, cycle in enumerate(cycles):
-            self.run_cycle(cycle, print_prompt=(print_prompt or i > 0))
-
-
-def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[Cycle]]:
-    """Parse the input file and return config and cycles.
+    The file has a config section, a single '---' separator, and then an
+    instruction stream that is interpreted one instruction at a time in file
+    order (INPUT/OUTPUT/WAIT/PROMPT/PROMPT_COLOR/TYPE_DELAY) — there is no
+    cycle grouping or repeated '---' delimiter.
 
     If `content` is given, it is parsed directly and `filepath` is only used
     for error messages (used by callers that need to pre-process the file,
     e.g. to resolve INCLUDE directives, before handing it to this parser).
     """
     config = Config()
-    cycles = []
+    actions = []
 
     if content is None:
         try:
@@ -229,11 +228,8 @@ def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[C
             print(f"Error: File '{filepath}' not found.")
             sys.exit(1)
 
-    # Split by cycle separator
-    sections = content.split('---')
-
-    # First section is config
-    config_section = sections[0].strip()
+    # Config section, then a single separator, then the instruction stream
+    config_section, _, body = content.partition('---')
     for line in config_section.split('\n'):
         # line = line.strip()
         if not line or line.startswith('#'):
@@ -276,71 +272,68 @@ def parse_input_file(filepath: str, content: str = None) -> Tuple[Config, List[C
                 except ValueError:
                     print(f"Warning: Invalid input_speed_max value '{value}', using default")
 
-    # Parse cycles
-    for section in sections[1:]:
-        section = section.strip()
-        if not section:
+    # Parse the instruction stream: one instruction at a time, in file order
+    lines = body.split('\n')
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        if line.strip().startswith('#') or not line.strip():
+            i += 1
             continue
 
-        cycle_config = {
-            'actions': [],
-            'type_delay': 0.2,
-            'prompt': None,
-            'prompt_color': None,
-            'has_input': False,
-        }
-
-        lines = section.split('\n')
-        i = 0
-        while i < len(lines):
-            line = lines[i]
-
-            if line.strip().startswith('#') or not line.strip():
-                i += 1
-                continue
-
-            if line.startswith('INPUT:'):
-                cycle_config['actions'].append(('input', line.replace('INPUT:', '', 1).strip()))
-                cycle_config['has_input'] = True
-            elif line.startswith('OUTPUT:'):
-                # Collect multi-line output
-                output_lines = []
-                i += 1
-                while i < len(lines):
-                    if lines[i].startswith(('WAIT:', 'INPUT:', 'PROMPT:', 'PROMPT_COLOR:')):
-                        break
-                    output_lines.append(lines[i])
-                    i += 1
-                cycle_config['actions'].append(('output', '\n'.join(output_lines)))
-                continue
-            elif line.startswith('WAIT:'):
-                try:
-                    cycle_config['actions'].append(('wait', float(line.replace('WAIT:', '', 1).strip())))
-                except ValueError:
-                    pass
-            elif line.startswith('TYPE_DELAY:'):
-                try:
-                    cycle_config['type_delay'] = float(line.replace('TYPE_DELAY:', '', 1).strip())
-                except ValueError:
-                    pass
-            elif line.startswith('PROMPT_COLOR:'):
-                cycle_config['prompt_color'] = line.replace('PROMPT_COLOR:', '', 1).strip()
-            elif line.startswith('PROMPT:'):
-                cycle_config['prompt'] = line.replace('PROMPT:', '', 1)
-
+        if line.startswith('INPUT:'):
+            actions.append(('input', line.replace('INPUT:', '', 1).strip()))
+        elif line.startswith('OUTPUT:'):
+            # Collect multi-line output. A line starting with one of the
+            # directive keywords ends the output; prefix it with '\' to
+            # emit that keyword as literal output text instead.
+            output_lines = []
             i += 1
+            while i < len(lines):
+                out_line = lines[i]
+                if out_line.startswith(('\\WAIT:', '\\INPUT:', '\\PROMPT:', '\\PROMPT_COLOR:', '\\TYPE_DELAY:')):
+                    out_line = out_line[1:]
+                elif out_line.startswith(('WAIT:', 'INPUT:', 'PROMPT:', 'PROMPT_COLOR:', 'TYPE_DELAY:')):
+                    break
+                output_lines.append(out_line)
+                i += 1
+            actions.append(('output', '\n'.join(output_lines)))
+            continue
+        elif line.startswith('WAIT:'):
+            try:
+                actions.append(('wait', float(line.replace('WAIT:', '', 1).strip())))
+            except ValueError:
+                pass
+        elif line.startswith('TYPE_DELAY:'):
+            try:
+                actions.append(('type_delay', float(line.replace('TYPE_DELAY:', '', 1).strip())))
+            except ValueError:
+                pass
+        elif line.startswith('PROMPT_COLOR:'):
+            actions.append(('prompt_color', line.replace('PROMPT_COLOR:', '', 1).strip()))
+        elif line.startswith('PROMPT:'):
+            actions.append(('prompt', line.replace('PROMPT:', '', 1)))
 
-        if cycle_config['has_input']:
-            if not any(action == 'wait' for action, _ in cycle_config['actions']):
-                cycle_config['actions'].append(('wait', 2.0))
-            cycles.append(Cycle(
-                actions=cycle_config['actions'],
-                prompt=cycle_config['prompt'],
-                prompt_color=cycle_config['prompt_color'],
-                type_delay=cycle_config['type_delay']
-            ))
+        i += 1
 
-    return config, cycles
+    # Insert a default 2s wait after each INPUT that has no explicit WAIT
+    # before the next INPUT (or end of stream) — same fallback as before,
+    # just without cycle boundaries to hang it on.
+    result = []
+    awaiting_wait = False
+    for action, value in actions:
+        if action == 'input':
+            if awaiting_wait:
+                result.append(('wait', 2.0))
+            awaiting_wait = True
+        elif action == 'wait':
+            awaiting_wait = False
+        result.append((action, value))
+    if awaiting_wait:
+        result.append(('wait', 2.0))
+
+    return config, result
 
 
 def main():
@@ -397,7 +390,7 @@ Example with randomness:
     args = parser.parse_args()
 
     # Parse input file
-    config, cycles = parse_input_file(args.input_file)
+    config, actions = parse_input_file(args.input_file)
 
     # Override config with CLI arguments
     if args.wait is not None:
@@ -416,7 +409,7 @@ Example with randomness:
 
     try:
         wt = config.initial_wait if not args.no_clear else 0
-        terminal.run(cycles, initial_wait=wt)
+        terminal.run(actions, initial_wait=wt)
     except KeyboardInterrupt:
         print("\n\nInterrupted by user.")
         sys.exit(0)

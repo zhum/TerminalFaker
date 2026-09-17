@@ -28,7 +28,9 @@ block content
 ```
 
 - **Header** — `KEY: value` lines before the first `---`, for global/region config.
-- **Blocks** — everything after, separated by `---`; meaning depends on the file (cycles for a terminal script, one block per dashboard region, etc.).
+- **Body** — everything after the first `---`; meaning depends on the file. For `mock_terminal.py`
+  it's a flat instruction stream interpreted one instruction at a time (no cycles/blocks); for
+  `dashboard.py` layout files it's one `---`-separated block per region.
 - **`INCLUDE: path/to/file`** — replaced with that file's contents (resolved relative to the including file's dir) before parsing. Works in any of these files, nests, and errors out on circular includes.
 - **Colors** — `black red green yellow blue magenta cyan white`, plus `bold dim italic underline`, combinable (e.g. `bold green`). Same names everywhere.
 - **Comments** — `#` lines are ignored in `mock_terminal.py` input files.
@@ -50,8 +52,9 @@ WAIT: 2
 ```
 
 - Header sets `PROMPT`, `PROMPT_COLOR`, `INPUT_COLOR`, `OUTPUT_COLOR`, `INPUT_SPEED`, `INPUT_SPEED_RANDOMNESS`/`INPUT_SPEED_MIN`/`INPUT_SPEED_MAX`, `INITIAL_WAIT`.
-- Each `---`-separated cycle: `INPUT:` (required), `OUTPUT:` (optional, multi-line), `WAIT:` (default 2s), per-cycle `PROMPT:`/`PROMPT_COLOR:` overrides.
+- After the single `---`, instructions run one at a time in file order: `INPUT:`, `OUTPUT:` (optional, multi-line), `WAIT:` (default 2s if omitted), `PROMPT:`/`PROMPT_COLOR:`/`TYPE_DELAY:` (sticky — apply to every following `INPUT:` until changed again).
 - Inline color markup: `{colorname}text{reset}` inside `INPUT:`/`OUTPUT:`; escape literal braces with `\{`/`\}`.
+- `OUTPUT:` ends at a line starting with a directive keyword (`WAIT:`/`INPUT:`/`PROMPT:`/`PROMPT_COLOR:`/`TYPE_DELAY:`); prefix with `\` (e.g. `\WAIT:`) to emit that text literally.
 - CLI: `python mock_terminal.py <input_file> [--wait N] [--no-clear] [--speed S] [--randomness] [--speed-min N] [--speed-max N]`.
 
 See [`mock_terminal.md`](mock_terminal.md) for full details and more examples.
