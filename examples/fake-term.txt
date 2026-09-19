@@ -1,0 +1,26 @@
+PROMPT:user@login01:~ $ 
+PROMPT_COLOR: green
+INPUT_COLOR: white
+OUTPUT_COLOR: white
+INPUT_SPEED: 0.01
+INPUT_SPEED_RANDOMNESS: true
+INPUT_SPEED_MIN: 0.01
+INPUT_SPEED_MAX: 0.3
+INITIAL_WAIT: 1
+---
+INPUT: squeue --start -o "%.6i %.10P %-12j %.9u %.2t %19S %19e %.6D %.10R"
+WAIT: 2
+OUTPUT:
+JOBID  PARTITION   NAME         USER      ST           START_TIME              END_TIME  NODES  NODELIST(REASON)
+{yellow}   35    compute   cfd_sim      jchen      R  2026-09-14T07:30:00   2026-09-14T13:30:00      6  cn[001-006]
+{yellow}   38    compute   ml_train     mkumar     R  2026-09-14T08:15:00   2026-09-14T14:00:00      4  cn[007-010]
+{yellow}   39    compute   genome_asm   lrossi     R  2026-09-14T06:45:00   2026-09-14T12:30:00      8  cn[017-024]
+{yellow}   40    compute   md_run       tng        R  2026-09-14T09:10:00   2026-09-14T15:45:00      5  cn[025-029]
+{green}   42    compute   benchmark_a  jchen      PD 2026-09-14T11:05:00   2026-09-14T13:05:00      4  (Resources)
+{red}   43    compute   qchem_opt    pwhite     R  2026-09-14T09:00:00   2026-09-14T11:00:00      2  cn[015-016]{reset}
+   44    compute   benchmark_b  mkumar     PD 2026-09-14T12:30:00   2026-09-14T14:30:00      6  (Priority)
+   45    compute   benchmark_c  lrossi     PD 2026-09-14T13:30:00   2026-09-14T15:00:00      3  (Resources)
+   46    compute   benchmark_d  tng        PD 2026-09-14T14:00:00   2026-09-14T16:00:00      4  (Priority)
+   47    compute   benchmark_e  pwhite     PD 2026-09-14T15:45:00   2026-09-14T18:15:00      8  (Resources)
+INPUT: 
+WAIT: 5

@@ -504,21 +504,27 @@ class StatusModule(Module):
 # ---------------------------------------------------------------------------
 
 _VAR_RE = re.compile(r'\{(\w+)\}')
-_TEXT_KV_RE = re.compile(r'(?im)^text:(.*)$')
 
 
-def _raw_text_value(text):
-    """Extract the `text:` value keeping leading spaces/tabs (only the
-    header block, before the first `---`), unlike parse_kv_body which
-    strips every value."""
-    header_block = text.split('---', 1)[0]
-    m = _TEXT_KV_RE.search(header_block)
+def _raw_kv_value(text, key):
+    """Extract a `key:` value keeping leading spaces/tabs, searching only
+    `text` itself (no `---` splitting), unlike parse_kv_body which strips
+    every value. Used where a value's exact formatting (leading spaces,
+    embedded ':') matters."""
+    pattern = re.compile(rf'(?im)^{re.escape(key)}:(.*)$')
+    m = pattern.search(text)
     if not m:
         return None
     value = m.group(1)
     if value.startswith(' '):
         value = value[1:]
     return value.rstrip('\r')
+
+
+def _raw_text_value(text):
+    """Extract the `text:` value from the header block (before the first
+    `---`) of a data file."""
+    return _raw_kv_value(text.split('---', 1)[0], 'text')
 
 
 class TextModule(Module):
@@ -572,6 +578,257 @@ class TextModule(Module):
             if row >= h - 1:
                 break
             safe_addstr(win, row, 2, line, plot_w, attr)
+        win.noutrefresh()
+
+
+# ---------------------------------------------------------------------------
+# region (template + VARS)
+# ---------------------------------------------------------------------------
+
+_SEMI_SPLIT_RE = re.compile(r'(?<!\\);')
+
+
+def _split_semicolon_list(raw):
+    """Split a `a;b\\;c;d` value on unescaped `;`, unescaping `\\;` to a
+    literal `;` in each item."""
+    parts = _SEMI_SPLIT_RE.split(raw or '')
+    return [p.strip().replace('\\;', ';') for p in parts if p.strip()]
+
+
+def _decimal_places(s):
+    return len(s.split('.', 1)[1]) if '.' in s else 0
+
+
+def _expand_range(start_str, end_str):
+    """RANGE: start;end -> list of formatted value strings stepping by one
+    unit in the smallest decimal place seen in either bound (integers if
+    neither has a fractional part), inclusive of both ends."""
+    start = float(start_str)
+    end = float(end_str)
+    decimals = max(_decimal_places(start_str.strip()), _decimal_places(end_str.strip()))
+    step = 10 ** -decimals if decimals else 1
+    sign = 1 if end >= start else -1
+    count = round(abs(end - start) / step) + 1
+    return [f"{start + sign * i * step:.{decimals}f}" for i in range(count)]
+
+
+_SAME_RE = re.compile(r'^SAME(?:\*(\d+))?$')
+
+
+def _finish_lines_item(current, items):
+    """Append one completed LINES item, honoring a lone `SAME`/`SAME*N` line
+    as "repeat the previous item for N more steps" (N=1 by default) instead
+    of literal text; `\\SAME`/`\\SAME*N` escapes to the literal text."""
+    if len(current) == 1:
+        stripped = current[0].strip()
+        if stripped.startswith('\\SAME') and _SAME_RE.match(stripped[1:]):
+            items.append(stripped[1:])
+            return
+        m = _SAME_RE.match(stripped)
+        if m:
+            if items:
+                items.extend([items[-1]] * int(m.group(1) or 1))
+            else:
+                print("Warning: SAME with no preceding LINES item, ignoring")
+            return
+    items.append('\n'.join(current))
+
+
+_BAR_CHARS = {
+    'solid': ('█', '░'),
+    'dots': ('•', '·'),
+    'hash': ('#', '-'),
+    'line': ('-', ' '),
+}
+_BAR_SPINNER = '|/-\\'
+
+
+class ProgressBar:
+    """An animated progress bar var: cur cycles between `start` and `end`
+    (values on the `min`..`max` scale) over `time` seconds, optionally
+    jittered by up to `random` seconds per step."""
+
+    def __init__(self, style, dash, vmin, vmax, start, end, duration, jitter, estimated, template):
+        self.style = style if style in _BAR_CHARS else 'solid'
+        self.dash = dash
+        self.min = vmin
+        self.max = vmax
+        self.start = start
+        self.end = end
+        self.duration = max(0.0001, duration)
+        self.jitter = max(0.0, jitter)
+        self.estimated = estimated
+        self.template = template
+        self.elapsed = 0.0
+        self.spin_idx = 0
+
+    def update(self, dt):
+        step = dt + (random.uniform(0, self.jitter) if self.jitter else 0.0)
+        self.elapsed = (self.elapsed + step) % self.duration
+        self.spin_idx += 1
+
+    @property
+    def cur(self):
+        return self.start + (self.end - self.start) * (self.elapsed / self.duration)
+
+    def _sub(self, s, cur, estimated):
+        return (s.replace('{min}', f"{self.min:g}")
+                 .replace('{max}', f"{self.max:g}")
+                 .replace('{cur}', f"{cur:.1f}")
+                 .replace('{elapsed}', f"{self.elapsed:.1f}")
+                 .replace('{estimated}', str(estimated)))
+
+    def render(self, width):
+        """Render the bar's own TEMPLATE, expanding {bar} to fill exactly
+        `width` columns (minus whatever the rest of the template takes)."""
+        cur = self.cur
+        estimated = self.estimated
+        if estimated is None:
+            estimated = f"{max(0.0, self.duration - self.elapsed):.1f}"
+
+        if '{bar}' not in self.template:
+            return self._sub(self.template, cur, estimated)
+
+        before_raw, after_raw = self.template.split('{bar}', 1)
+        before = self._sub(before_raw, cur, estimated)
+        after = self._sub(after_raw, cur, estimated)
+        bar_w = max(0, width - len(before) - len(after))
+
+        span = self.max - self.min
+        pct = 0.0 if span == 0 else (cur - self.min) / span
+        pct = max(0.0, min(1.0, pct))
+        filled = max(0, min(bar_w, int(bar_w * pct)))
+        fill_char, empty_char = _BAR_CHARS[self.style]
+        bar = fill_char * filled + empty_char * (bar_w - filled)
+        if self.dash and 0 < filled < bar_w:
+            spin = _BAR_SPINNER[self.spin_idx % len(_BAR_SPINNER)]
+            bar = bar[:filled] + spin + bar[filled + 1:]
+        return before + bar + after
+
+
+class RegionModule(Module):
+    """Renders a TEMPLATE string (`\\n`-separated lines, like `text`'s TEXT:)
+    with `{var}` placeholders filled from VARS blocks: a plain `;`-list, a
+    `.`-delimited list of multi-line strings, or an animated progress bar."""
+
+    def parse(self, text):
+        header, blocks = parse_kv_body(text)
+        self.template = _raw_kv_value(text.split('---', 1)[0], 'template') or ''
+        self.interval = float(header.get('interval', 1.0))
+        self.duration = float(header['duration']) if 'duration' in header else None
+        self.vars = {}
+        for block in blocks:
+            self._parse_var_block(block)
+        self._last_frame = None
+
+    def _parse_var_block(self, block):
+        kv = {}
+        lines = block.split('\n')
+        lines_start = None
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if stripped.lower() in ('lines:', 'lines'):
+                lines_start = i
+                break
+            if ':' not in stripped:
+                continue
+            key, value = stripped.split(':', 1)
+            kv[key.strip().lower()] = value.strip()
+
+        name = kv.get('var')
+        if not name:
+            return
+
+        if lines_start is not None:
+            items = []
+            current = []
+            for line in lines[lines_start + 1:]:
+                if line.strip() == '.':
+                    _finish_lines_item(current, items)
+                    current = []
+                else:
+                    current.append(line)
+            if any(l.strip() for l in current):
+                _finish_lines_item(current, items)
+            values = items or ['']
+            self.vars[name] = self._make_list_var(values, kv)
+        elif kv.get('type', '').lower() == 'bar':
+            template = _raw_kv_value(block, 'template') or '{bar}'
+            vmin = float(kv.get('min', 0))
+            vmax = float(kv.get('max', 100))
+            default_time = self.duration if self.duration is not None else 10.0
+            self.vars[name] = {
+                'kind': 'bar',
+                'bar': ProgressBar(
+                    style=kv.get('style', 'solid').lower(),
+                    dash=kv.get('dash', '0').lower() in ('1', 'true', 'yes', 'on'),
+                    vmin=vmin,
+                    vmax=vmax,
+                    start=float(kv.get('start', vmin)),
+                    end=float(kv.get('end', vmax)),
+                    duration=float(kv.get('time', default_time)),
+                    jitter=float(kv.get('random', 0)),
+                    estimated=kv.get('estimated'),
+                    template=template,
+                ),
+            }
+        elif 'range' in kv:
+            start_str, _, end_str = kv['range'].partition(';')
+            values = _expand_range(start_str, end_str)
+            self.vars[name] = self._make_list_var(values or ['0'], kv)
+        else:
+            values = _split_semicolon_list(kv.get('values', ''))
+            self.vars[name] = self._make_list_var(values or [''], kv)
+
+    def _make_list_var(self, values, kv):
+        """A list-kind var's own step interval: explicit per-var INTERVAL
+        wins; else, if the region has DURATION, space steps so the last
+        value lands exactly at DURATION; else fall back to the region's
+        (global) INTERVAL."""
+        if 'interval' in kv:
+            interval = float(kv['interval'])
+        elif self.duration is not None:
+            steps = max(1, len(values) - 1)
+            interval = self.duration / steps
+        else:
+            interval = self.interval
+        return {'kind': 'list', 'values': values, 'idx': 0, 'interval': interval, 'last_tick': None}
+
+    def update(self, now):
+        dt = 0.0 if self._last_frame is None else now - self._last_frame
+        self._last_frame = now
+        for v in self.vars.values():
+            if v['kind'] == 'bar':
+                v['bar'].update(dt)
+            elif v['last_tick'] is None:
+                v['last_tick'] = now
+            elif now - v['last_tick'] >= v['interval']:
+                v['last_tick'] = now
+                v['idx'] = (v['idx'] + 1) % len(v['values'])
+
+    def render(self, win):
+        self._draw_frame(win, self.name)
+        h, w = win.getmaxyx()
+        plot_w = max(0, w - 4)
+        row = 0
+        for line in self.template.split('\\n'):
+            rendered = line
+            for name, v in self.vars.items():
+                placeholder = '{' + name + '}'
+                if placeholder not in rendered:
+                    continue
+                if v['kind'] == 'bar':
+                    rendered = rendered.replace(placeholder, v['bar'].render(plot_w))
+                else:
+                    rendered = rendered.replace(placeholder, str(v['values'][v['idx']]))
+            for sub_line in rendered.split('\n'):
+                out_row = 1 + row
+                if out_row >= h - 1:
+                    break
+                safe_addstr(win, out_row, 2, sub_line, plot_w)
+                row += 1
         win.noutrefresh()
 
 
@@ -759,4 +1016,5 @@ MODULE_REGISTRY = {
     'text': TextModule,
     'matrix': MatrixModule,
     'terminal': TerminalModule,
+    'region': RegionModule,
 }

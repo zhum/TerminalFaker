@@ -415,7 +415,7 @@ Make sure `INPUT:` values don't already contain the prompt text.
 
 ## Examples Included
 
-- `demo.txt` - Basic demonstration with various commands
+- `examples/dashboard/session.terminal.txt` - Basic demonstration with various commands
 
 ## License
 

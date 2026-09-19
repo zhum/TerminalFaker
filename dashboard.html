@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html  dir="ltr">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title></title>
+        <link rel="shortcut icon" href="images/favicon.ico" type="image/x-icon">
+        <link rel="apple-touch-icon-precomposed" href="images/apple-touch-icon.png">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/uikit/2.26.4/css/uikit.gradient.css">
+
+        <!-- <link rel="stylesheet" href="style.css"> -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/diversen/pandoc-uikit@master/style.css">
+        <link href="https://vjs.zencdn.net/5.4.4/video-js.css" rel="stylesheet" />
+        <script src="https://code.jquery.com/jquery-2.2.1.min.js"></script>
+        <!-- <script src="uikit.js"></script> -->
+        <script src="https://cdn.jsdelivr.net/gh/diversen/pandoc-uikit@master/uikit.js"></script>
+        <!-- <script src="scripts.js"></script> -->
+        <script src="https://cdn.jsdelivr.net/gh/diversen/pandoc-uikit@master/scripts.js"></script>
+        <!-- <script src="jquery.sticky-kit.js "></script> -->
+        <script src="https://cdn.jsdelivr.net/gh/diversen/pandoc-uikit@master/jquery.sticky-kit.js"></script>
+
+        <meta name="generator" content="pandoc-uikit" />
+                        <title>dashboard</title>
+        <style type="text/css">code{white-space: pre;}</style>
+                                                       
+    </head>
+
+    <body>
+
+
+        <div class="uk-container uk-container-center uk-margin-top uk-margin-large-bottom">
+
+            
+            <div class="uk-grid" data-uk-grid-margin >          
+                <div class="uk-width-medium-1-4">
+                    <div class="uk-overflow-container" data-uk-sticky="{top:25,media: 768}">
+                        <div class="uk-panel uk-panel-box menu-begin" >
+
+                                                        <ul>
+                                                        <li><a
+                                                        href="#dashboard-bashtop-like-fake-data-grid"
+                                                        id="toc-dashboard-bashtop-like-fake-data-grid">Dashboard
+                                                        — bashtop-like
+                                                        fake data
+                                                        grid</a>
+                                                        <ul>
+                                                        <li><a
+                                                        href="#layout-file"
+                                                        id="toc-layout-file">Layout
+                                                        file</a></li>
+                                                        <li><a
+                                                        href="#include-directive"
+                                                        id="toc-include-directive"><code>INCLUDE:</code>
+                                                        directive</a></li>
+                                                        <li><a
+                                                        href="#module-data-file-formats"
+                                                        id="toc-module-data-file-formats">Module
+                                                        data-file
+                                                        formats</a>
+                                                        <ul>
+                                                        <li><a
+                                                        href="#gauge"
+                                                        id="toc-gauge"><code>gauge</code></a></li>
+                                                        <li><a
+                                                        href="#timeline"
+                                                        id="toc-timeline"><code>timeline</code></a></li>
+                                                        <li><a
+                                                        href="#log"
+                                                        id="toc-log"><code>log</code></a></li>
+                                                        <li><a
+                                                        href="#status"
+                                                        id="toc-status"><code>status</code></a></li>
+                                                        <li><a
+                                                        href="#matrix"
+                                                        id="toc-matrix"><code>matrix</code></a></li>
+                                                        <li><a
+                                                        href="#text"
+                                                        id="toc-text"><code>text</code></a></li>
+                                                        <li><a
+                                                        href="#region"
+                                                        id="toc-region"><code>region</code></a></li>
+                                                        <li><a
+                                                        href="#terminal"
+                                                        id="toc-terminal"><code>terminal</code></a></li>
+                                                        </ul></li>
+                                                        <li><a
+                                                        href="#colors"
+                                                        id="toc-colors">Colors</a></li>
+                                                        </ul></li>
+                                                        </ul>
+                            
+                        </div>
+                    </div>
+                </div>
+
+                <div class="uk-width-medium-3-4">
+
+                    
+<h1 id="dashboard-bashtop-like-fake-data-grid">Dashboard — bashtop-like
+fake data grid</h1>
+<p><code>dashboard.py</code> renders a grid of independently animated
+regions, each fed by its own fake-data file, in a single curses screen.
+It’s built on top of <code>mock_terminal.py</code> (see
+<code>mock_terminal.md</code>) but that script stays fully standalone —
+<code>dashboard.py</code> imports it as a library, never the
+reverse.</p>
+<pre><code>python dashboard.py &lt;layout_file&gt; [--fps N]</code></pre>
+<p>Press <code>q</code> to quit.</p>
+<h2 id="layout-file">Layout file</h2>
+<p>Same two-part style as <code>mock_terminal.py</code>’s input files: a
+<code>KEY: value</code> header, then <code>---</code>-separated blocks —
+one block per region.</p>
+<pre><code>TITLE: System Monitor
+REFRESH_RATE: 0.1
+---
+REGION: cpu_gauge
+TYPE: gauge
+ROW: 0
+COL: 0
+DATA: cpu.gauge.txt
+---
+REGION: net_chart
+TYPE: timeline
+ROW: 0
+COL: 1
+DATA: net.timeline.txt
+---
+REGION: main_log
+TYPE: log
+ROW: 1
+COL: 0
+COLSPAN: 2
+DATA: system.log.txt
+---
+REGION: term
+TYPE: terminal
+ROW: 2
+COL: 0
+DATA: session.terminal.txt
+---
+REGION: status
+TYPE: status
+ROW: 2
+COL: 1
+DATA: services.status.txt</code></pre>
+<p>Header keys:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>TITLE</code></td>
+<td>Optional title bar text</td>
+</tr>
+<tr class="even">
+<td><code>REFRESH_RATE</code></td>
+<td>Seconds between frames (default <code>0.1</code>); overridden by
+<code>--fps</code></td>
+</tr>
+</tbody>
+</table>
+<p>Region block keys:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>REGION</code></td>
+<td>Unique region name</td>
+</tr>
+<tr class="even">
+<td><code>TYPE</code></td>
+<td>One of <code>gauge</code>, <code>timeline</code>, <code>log</code>,
+<code>status</code>, <code>text</code>, <code>matrix</code>,
+<code>terminal</code>, <code>region</code></td>
+</tr>
+<tr class="odd">
+<td><code>ROW</code> / <code>COL</code></td>
+<td>Grid cell position (0-based)</td>
+</tr>
+<tr class="even">
+<td><code>ROWSPAN</code> / <code>COLSPAN</code></td>
+<td>Cells spanned (default <code>1</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>DATA</code></td>
+<td>Path to the region’s data file, relative to the layout file</td>
+</tr>
+</tbody>
+</table>
+<p>The grid size is derived from the highest
+<code>ROW</code>/<code>COL</code> + span used; cells are
+equal-sized.</p>
+<h2 id="include-directive"><code>INCLUDE:</code> directive</h2>
+<p>Any line of the form:</p>
+<pre><code>INCLUDE: path/to/file.txt</code></pre>
+<p>is replaced with the contents of that file (resolved relative to the
+including file’s directory) before the file is parsed. Works in the
+layout file and in every module’s data file — nest as needed. Circular
+includes raise an error instead of hanging.</p>
+<h2 id="module-data-file-formats">Module data-file formats</h2>
+<p>Each module’s data file uses the same <code>KEY: value</code> header
++ <code>---</code>-blocks style as the layout file.</p>
+<h3 id="gauge"><code>gauge</code></h3>
+<pre><code>LABEL: CPU
+MIN: 0
+MAX: 100
+UNIT: %
+WARN: 70
+CRIT: 90
+INTERVAL: 1.0
+---
+VALUES: 23,45,67,89,42,30</code></pre>
+<p>Replays <code>VALUES</code> in a loop, one value every
+<code>INTERVAL</code> seconds. Bar turns yellow at <code>WARN</code>,
+red at <code>CRIT</code> (default 70%/90% of the range).</p>
+<p>Instead of <code>WARN</code>/<code>CRIT</code>, give
+<code>COLORS</code> a <code>value:color</code> list to pick the bar
+color from arbitrary thresholds:</p>
+<pre><code>COLORS: 0:green,70:yellow,90:red</code></pre>
+<p>Entries must be ascending by value (out-of-order entries get a
+warning and are auto-sorted). The color used is that of the highest
+threshold <code>&lt;=</code> the current value; below the first
+threshold the bar defaults to green. When <code>COLORS</code> is present
+it replaces <code>WARN</code>/<code>CRIT</code> entirely.</p>
+<h3 id="timeline"><code>timeline</code></h3>
+<pre><code>LABEL: Network In (Mbps)
+COLOR: cyan
+MIN: 0
+MAX: 100
+INTERVAL: 1.0
+WINDOW: 120
+---
+VALUES: 12,15,14,20,18,30,45,22</code></pre>
+<p>Replays <code>VALUES</code> into a scrolling sparkline.
+<code>MIN</code>/<code>MAX</code> are optional (auto-scales to the
+visible window if omitted). <code>WINDOW</code> caps how many points are
+kept.</p>
+<p><code>COLORS</code> works the same way as for <code>gauge</code> — a
+<code>value:color</code> list, ascending, picking the highest threshold
+<code>&lt;=</code> each plotted value (points below the first threshold,
+and the whole line when <code>COLORS</code> is omitted, use
+<code>COLOR</code>):</p>
+<pre><code>COLORS: 0:green,60:yellow,85:red</code></pre>
+<p><code>STYLE</code> picks how the plot is drawn (default
+<code>filled</code>):</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Style</th>
+<th>Look</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>filled</code></td>
+<td>Solid unicode blocks (<code>█▁▂▃▄▅▆▇</code>), one column per value,
+eighth-cell vertical resolution.</td>
+</tr>
+<tr class="even">
+<td><code>dotted</code></td>
+<td>Braille dot grid (2 values per character cell), higher resolution,
+half the on-screen width per value.</td>
+</tr>
+<tr class="odd">
+<td><code>ascii</code></td>
+<td>Plain-ASCII fill (<code>_ = #</code>), one column per value,
+three-level vertical resolution — for terminals without unicode/braille
+support.</td>
+</tr>
+</tbody>
+</table>
+<pre><code>STYLE: dotted</code></pre>
+<h3 id="log"><code>log</code></h3>
+<pre><code>INTERVAL_MIN: 0.3
+INTERVAL_MAX: 2.0
+LOOP: true
+---
+[INFO] service started
+[WARN] high memory usage
+INCLUDE: shared_errors.log</code></pre>
+<p>Everything after the first <code>---</code> is treated as literal log
+lines (not <code>KEY:</code> directives), appended one at a time at a
+random interval between <code>INTERVAL_MIN</code> and
+<code>INTERVAL_MAX</code>. Lines containing
+<code>error</code>/<code>crit</code>/<code>fail</code> or
+<code>warn</code> (case-insensitive) are colored red/yellow
+automatically.</p>
+<h3 id="status"><code>status</code></h3>
+<pre><code>INTERVAL: 3.0
+---
+NAME: API
+STATES: green,green,yellow,green
+---
+NAME: DB
+STATES: green,red,green</code></pre>
+<p>Each block after the header is one named indicator; its light cycles
+through <code>STATES</code> (any color name) every <code>INTERVAL</code>
+seconds.</p>
+<h3 id="matrix"><code>matrix</code></h3>
+<pre><code>CHARSET: katakana
+SPEED: 0.05
+COLOR: green</code></pre>
+<p><code>CHARSET</code> is <code>ascii</code>, <code>binary</code>, or
+<code>katakana</code>. A data file is optional — with none, the region
+just rains random glyphs. Add a body to rain specific tokens
+instead:</p>
+<pre><code>CHARSET: ascii
+SPEED: 0.04
+---
+INCLUDE: wordlist.txt</code></pre>
+<h3 id="text"><code>text</code></h3>
+<pre><code>TEXT: CPU {cpu}% / MEM {mem}%\nUptime: 14d
+COLOR: bold cyan
+INTERVAL: 1.0
+---
+VAR: cpu
+VALUES: 12,18,45,80
+---
+VAR: mem
+VALUES: 30,32,31</code></pre>
+<p><code>TEXT</code> is a single line; <code>\n</code> inside it starts
+a new output line. <code>{var}</code> placeholders are filled from the
+<code>VAR:</code>/<code>VALUES:</code> blocks (comma-separated, no
+escaping), cycling one value every <code>INTERVAL</code> seconds.
+Unbound <code>{var}</code>s default to <code>?</code>.</p>
+<h3 id="region"><code>region</code></h3>
+<p>Fills a <code>TEMPLATE</code> with <code>{var}</code> placeholders
+whose values come from <code>VARS</code> blocks (one block per var):</p>
+<pre><code>TEMPLATE: CPU: {cpu}%\nStatus: {status}\n{load}
+INTERVAL: 1.0
+---
+VAR: cpu
+VALUES: 12;18;45;80
+---
+VAR: status
+LINES:
+all systems nominal
+.
+degraded — retrying
+node down
+.
+---
+VAR: load
+TYPE: bar
+STYLE: solid
+DASH: 1
+MIN: 0
+MAX: 100
+START: 10
+END: 95
+TIME: 8
+RANDOM: 0.3
+TEMPLATE: [{bar}] {cur}/{max} eta {estimated}s</code></pre>
+<p><code>TEMPLATE</code> (header) is one line; <code>\n</code> inside it
+starts a new output line (same convention as <code>text</code>’s
+<code>TEXT:</code>). <code>INTERVAL</code> is how often list-kind vars
+advance, by default.</p>
+<p>To sync every var to one full animation cycle, set
+<code>DURATION</code> (seconds) on the header instead: each list-kind
+var then spaces its own steps as <code>DURATION / (count - 1)</code>, so
+it lands on its last value exactly at <code>DURATION</code>, and any
+<code>bar</code> var whose <code>TIME</code> isn’t set defaults to
+<code>DURATION</code> too — the whole region reaches its end state
+together, then loops. A var can still opt out by giving its own
+<code>INTERVAL</code> (list vars) or <code>TIME</code> (bar vars) in its
+block.</p>
+<p>Each <code>VARS</code> block starts with <code>VAR: name</code> and
+is one of:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Kind</th>
+<th>Block</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>List</td>
+<td><code>VALUES: a;b\;c</code></td>
+<td><code>;</code>-separated strings (<code>\;</code> escapes a literal
+<code>;</code>); cycles one per <code>INTERVAL</code>.</td>
+</tr>
+<tr class="even">
+<td>Multi-line list</td>
+<td><code>LINES:</code> followed by lines, items separated by a line
+containing just <code>.</code></td>
+<td>Each item can span multiple lines; cycles one per
+<code>INTERVAL</code>. A lone <code>SAME</code> (or <code>SAME*N</code>)
+item repeats the previous item for 1 (or <code>N</code>) more steps
+instead of being literal text; escape as
+<code>\SAME</code>/<code>\SAME*N</code> for a literal line.</td>
+</tr>
+<tr class="odd">
+<td>Range</td>
+<td><code>RANGE: start;end</code></td>
+<td>Counts (inclusive) from <code>start</code> to <code>end</code>
+(steps down if <code>end &lt; start</code>), one step per
+<code>INTERVAL</code>. Integer if neither bound has a <code>.</code>;
+otherwise steps by the smallest decimal place seen and keeps that many
+digits (<code>RANGE: 5.0;6.5</code> →
+<code>5.0, 5.1, ... 6.5</code>).</td>
+</tr>
+<tr class="even">
+<td>Progress bar</td>
+<td><code>TYPE: bar</code> plus bar settings below</td>
+<td>An animated bar, updated every frame (not gated by
+<code>INTERVAL</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>Bar settings:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>STYLE</code></td>
+<td><code>solid</code> (<code>█</code>/<code>░</code>),
+<code>dots</code> (<code>•</code>/<code>·</code>), <code>hash</code>
+(<code>#</code>/<code>-</code>), <code>line</code>
+(<code>-</code>/<code></code>); default <code>solid</code></td>
+</tr>
+<tr class="even">
+<td><code>DASH</code></td>
+<td><code>true</code>/<code>1</code> shows a rotating spinner at the
+fill edge</td>
+</tr>
+<tr class="odd">
+<td><code>MIN</code> / <code>MAX</code></td>
+<td>Value range the bar’s fill fraction is computed against (default
+<code>0</code>/<code>100</code>)</td>
+</tr>
+<tr class="even">
+<td><code>START</code> / <code>END</code></td>
+<td>Animated value’s start/end points (default
+<code>MIN</code>/<code>MAX</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>TIME</code></td>
+<td>Seconds to animate from <code>START</code> to <code>END</code>, then
+loops</td>
+</tr>
+<tr class="even">
+<td><code>RANDOM</code></td>
+<td>Max random seconds of jitter added per frame (default
+<code>0</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>ESTIMATED</code></td>
+<td>Fixed value for <code>{estimated}</code>; if omitted, counts down
+<code>TIME</code> remaining</td>
+</tr>
+<tr class="even">
+<td><code>TEMPLATE</code></td>
+<td>The bar’s own line; <code>{bar}</code> expands to fill the rest of
+the region’s width, so the line spans the full width. Also supports
+<code>{min}</code>, <code>{max}</code>, <code>{cur}</code>,
+<code>{elapsed}</code>, <code>{estimated}</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="terminal"><code>terminal</code></h3>
+<pre><code>DATA: session.terminal.txt</code></pre>
+<p>Uses the <strong>exact same input-file format as standalone
+<code>mock_terminal.py</code></strong> (<code>PROMPT:</code>,
+<code>INPUT:</code>, <code>OUTPUT:</code>, <code>WAIT:</code>, inline
+<code>{color}</code> markup, etc. — see <code>mock_terminal.md</code>).
+The region reuses <code>mock_terminal.py</code>’s own typing/ color
+engine, replaying the flat instruction stream in order and looping back
+to the start once it finishes.</p>
+<h2 id="colors">Colors</h2>
+<p>All modules accept the same color names as
+<code>mock_terminal.py</code>:
+<code>black red green yellow blue magenta cyan white bold dim italic underline</code>,
+combinable (e.g. <code>bold green</code>).</p>                    
+                </div>
+            </div>
+            <script src="https://vjs.zencdn.net/5.4.4/video.js"></script>
+        </div>
+    </body>
+</html>

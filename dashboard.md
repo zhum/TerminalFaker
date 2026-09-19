@@ -64,7 +64,7 @@ Region block keys:
 | Key | Meaning |
 |---|---|
 | `REGION` | Unique region name |
-| `TYPE` | One of `gauge`, `timeline`, `log`, `status`, `matrix`, `terminal` |
+| `TYPE` | One of `gauge`, `timeline`, `log`, `status`, `text`, `matrix`, `terminal`, `region` |
 | `ROW` / `COL` | Grid cell position (0-based) |
 | `ROWSPAN` / `COLSPAN` | Cells spanned (default `1`) |
 | `DATA` | Path to the region's data file, relative to the layout file |
@@ -207,6 +207,92 @@ SPEED: 0.04
 INCLUDE: wordlist.txt
 ```
 
+### `text`
+
+```
+TEXT: CPU {cpu}% / MEM {mem}%\nUptime: 14d
+COLOR: bold cyan
+INTERVAL: 1.0
+---
+VAR: cpu
+VALUES: 12,18,45,80
+---
+VAR: mem
+VALUES: 30,32,31
+```
+
+`TEXT` is a single line; `\n` inside it starts a new output line. `{var}`
+placeholders are filled from the `VAR:`/`VALUES:` blocks (comma-separated,
+no escaping), cycling one value every `INTERVAL` seconds. Unbound `{var}`s
+default to `?`.
+
+### `region`
+
+Fills a `TEMPLATE` with `{var}` placeholders whose values come from `VARS`
+blocks (one block per var):
+
+```
+TEMPLATE: CPU: {cpu}%\nStatus: {status}\n{load}
+INTERVAL: 1.0
+---
+VAR: cpu
+VALUES: 12;18;45;80
+---
+VAR: status
+LINES:
+all systems nominal
+.
+degraded — retrying
+node down
+.
+---
+VAR: load
+TYPE: bar
+STYLE: solid
+DASH: 1
+MIN: 0
+MAX: 100
+START: 10
+END: 95
+TIME: 8
+RANDOM: 0.3
+TEMPLATE: [{bar}] {cur}/{max} eta {estimated}s
+```
+
+`TEMPLATE` (header) is one line; `\n` inside it starts a new output line
+(same convention as `text`'s `TEXT:`). `INTERVAL` is how often list-kind
+vars advance, by default.
+
+To sync every var to one full animation cycle, set `DURATION` (seconds) on
+the header instead: each list-kind var then spaces its own steps as
+`DURATION / (count - 1)`, so it lands on its last value exactly at
+`DURATION`, and any `bar` var whose `TIME` isn't set defaults to `DURATION`
+too — the whole region reaches its end state together, then loops. A var
+can still opt out by giving its own `INTERVAL` (list vars) or `TIME` (bar
+vars) in its block.
+
+Each `VARS` block starts with `VAR: name` and is one of:
+
+| Kind | Block | Value |
+|---|---|---|
+| List | `VALUES: a;b\;c` | `;`-separated strings (`\;` escapes a literal `;`); cycles one per `INTERVAL`. |
+| Multi-line list | `LINES:` followed by lines, items separated by a line containing just `.` | Each item can span multiple lines; cycles one per `INTERVAL`. A lone `SAME` (or `SAME*N`) item repeats the previous item for 1 (or `N`) more steps instead of being literal text; escape as `\SAME`/`\SAME*N` for a literal line. |
+| Range | `RANGE: start;end` | Counts (inclusive) from `start` to `end` (steps down if `end < start`), one step per `INTERVAL`. Integer if neither bound has a `.`; otherwise steps by the smallest decimal place seen and keeps that many digits (`RANGE: 5.0;6.5` → `5.0, 5.1, ... 6.5`). |
+| Progress bar | `TYPE: bar` plus bar settings below | An animated bar, updated every frame (not gated by `INTERVAL`). |
+
+Bar settings:
+
+| Key | Meaning |
+|---|---|
+| `STYLE` | `solid` (`█`/`░`), `dots` (`•`/`·`), `hash` (`#`/`-`), `line` (`-`/` `); default `solid` |
+| `DASH` | `true`/`1` shows a rotating spinner at the fill edge |
+| `MIN` / `MAX` | Value range the bar's fill fraction is computed against (default `0`/`100`) |
+| `START` / `END` | Animated value's start/end points (default `MIN`/`MAX`) |
+| `TIME` | Seconds to animate from `START` to `END`, then loops |
+| `RANDOM` | Max random seconds of jitter added per frame (default `0`) |
+| `ESTIMATED` | Fixed value for `{estimated}`; if omitted, counts down `TIME` remaining |
+| `TEMPLATE` | The bar's own line; `{bar}` expands to fill the rest of the region's width, so the line spans the full width. Also supports `{min}`, `{max}`, `{cur}`, `{elapsed}`, `{estimated}` |
+
 ### `terminal`
 
 ```
@@ -216,7 +302,8 @@ DATA: session.terminal.txt
 Uses the **exact same input-file format as standalone `mock_terminal.py`**
 (`PROMPT:`, `INPUT:`, `OUTPUT:`, `WAIT:`, inline `{color}` markup, etc. —
 see `mock_terminal.md`). The region reuses `mock_terminal.py`'s own typing/
-color engine, looping the cycles once they finish.
+color engine, replaying the flat instruction stream in order and looping
+back to the start once it finishes.
 
 ## Colors
 
