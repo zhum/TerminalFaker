@@ -1,0 +1,8 @@
+TITLE: System Monitor
+REFRESH_RATE: 0.2
+---
+REGION: simple
+TYPE: region
+ROW: 0
+COL: 0
+DATA: simple-region.txt

@@ -1,0 +1,14 @@
+TITLE: Deploy Monitor (fake)
+REFRESH_RATE: 0.08
+---
+REGION: progress
+TYPE: region
+ROW: 0
+COL: 0
+DATA: progress.region.txt
+---
+REGION: term
+TYPE: terminal
+ROW: 0
+COL: 1
+DATA: terminal.region.txt

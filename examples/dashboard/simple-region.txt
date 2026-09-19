@@ -1,0 +1,28 @@
+TEMPLATE: CPU: {cpu}%\nStatus: {status}\n{load}
+INTERVAL: 1.0
+---
+VAR: cpu
+VALUES: 12;18;45;45;45;80;80;80
+---
+VAR: status
+LINES:
+all systems nominal
+.
+SAME*3
+degraded — retrying
+node down
+.
+SAME*3
+---
+VAR: load
+TYPE: bar
+STYLE: solid
+DASH: 1
+MIN: 0
+MAX: 100
+START: 10
+END: 95
+TIME: 8
+RANDOM: 0.3
+TEMPLATE: [{bar}] {cur}/{max} eta {estimated}s
+

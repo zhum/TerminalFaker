@@ -1,0 +1,19 @@
+TEMPLATE: Deploying build #4127\nStage: {stage}\nReplicas ready: {replicas}/5\n{progress}
+DURATION: 12
+---
+VAR: stage
+VALUES: pulling image;running migrations;starting workers;health checks
+---
+VAR: replicas
+RANGE: 0;5
+---
+VAR: progress
+TYPE: bar
+STYLE: solid
+DASH: 1
+MIN: 0
+MAX: 100
+START: 0
+END: 100
+RANDOM: 0.4
+TEMPLATE: [{bar}] {cur}% eta {estimated}s

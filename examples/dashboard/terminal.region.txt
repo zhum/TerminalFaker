@@ -1,0 +1,21 @@
+PROMPT: deploy$
+PROMPT_COLOR: green
+INPUT_COLOR: cyan
+OUTPUT_COLOR: white
+INPUT_SPEED: 0.03
+INITIAL_WAIT: 0
+---
+INPUT: kubectl rollout status deploy/api
+OUTPUT:
+Waiting for rollout to finish: 2 of 5 updated replicas are available...
+Waiting for rollout to finish: 4 of 5 updated replicas are available...
+deployment "api" successfully rolled out
+WAIT: 2
+
+---
+INPUT: kubectl get pods -l app=api
+OUTPUT:
+NAME                READY   STATUS    RESTARTS
+api-7d4f9c-abcde    1/1     Running   0
+api-7d4f9c-fghij    1/1     Running   0
+WAIT: 2
